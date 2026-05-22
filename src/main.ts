@@ -5,12 +5,14 @@ import {
   updateScore,
   generateQuestion,
   resetGame,
-  endGame
+  endGame,
+  addReactionTime,
+  getAverageReaction
 } from './game'
 
-let correct = 0
-let wrong = 0
-let totalReactionTime = 0
+// ================= STATE =================
+
+let score = 0
 
 let timeLeft = 10
 let selectedTime = 10
@@ -24,6 +26,7 @@ let currentStartTime = 0
 let timerInterval: ReturnType<typeof setInterval> | null = null
 
 // ================= RENDER UI =================
+
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 
 <div class="start-screen">
@@ -38,10 +41,9 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <ul>
     <li>Click the correct color button</li>
     <li>Respond as fast as possible</li>
-    <li>You have limited time</li>
+    <li>One mistake = Game Over</li>
   </ul>
 
-  <!-- TIME SELECT -->
   <div class="time-select">
 
     <p>Select Time</p>
@@ -62,7 +64,6 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 
 <div class="game-screen" style="display:none">
 
-  <!-- EXIT BUTTON -->
   <button id="exit-btn" class="exit-btn">
     EXIT
   </button>
@@ -76,18 +77,8 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div class="metrics">
 
     <div class="metric-card">
-      <span>Correct</span>
+      <span>Score</span>
       <h2 id="correct-score">0</h2>
-    </div>
-
-    <div class="metric-card">
-      <span>Wrong</span>
-      <h2 id="wrong-score">0</h2>
-    </div>
-
-    <div class="metric-card">
-      <span>Accuracy</span>
-      <h2 id="accuracy-score">0%</h2>
     </div>
 
     <div class="metric-card">
@@ -116,10 +107,15 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 
   <div class="result-card">
 
-    <p>Correct: <span id="final-correct">0</span></p>
-    <p>Wrong: <span id="final-wrong">0</span></p>
-    <p>Accuracy: <span id="final-accuracy">0%</span></p>
-    <p>Avg Response: <span id="final-reaction">0 ms</span></p>
+    <p>
+      Score:
+      <span id="final-correct">0</span>
+    </p>
+
+    <p>
+      Avg Response:
+      <span id="final-reaction">0 ms</span>
+    </p>
 
   </div>
 
@@ -140,6 +136,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 `
 
 // ================= TIME SELECT =================
+
 const timeButtons =
   document.querySelectorAll('.time-btn')
 
@@ -162,6 +159,7 @@ timeButtons.forEach((btn) => {
 })
 
 // ================= START GAME =================
+
 const startBtn =
   document.querySelector('#start-btn') as HTMLButtonElement
 
@@ -183,7 +181,7 @@ startBtn.addEventListener('click', () => {
   startScreen.style.display = 'none'
   gameScreen.style.display = 'flex'
 
-  updateScore(0, 0, 0)
+  updateScore(0, 0)
   updateTimer(timeLeft)
 
   startTimer()
@@ -191,40 +189,38 @@ startBtn.addEventListener('click', () => {
 })
 
 // ================= TIMER =================
+
 const startTimer = () => {
 
-  if (timerInterval) {
+  if(timerInterval){
+
     clearInterval(timerInterval)
   }
 
   timerInterval = setInterval(() => {
 
-    if (!gameStarted) return
-    if (gameEnded) return
+    if(!gameStarted) return
+    if(gameEnded) return
 
     timeLeft--
 
     updateTimer(timeLeft)
 
-    if (timeLeft <= 0) {
+    if(timeLeft <= 0){
 
       gameEnded = true
+      gameStarted = false
 
-      if (timerInterval) {
-        clearInterval(timerInterval)
-      }
+      clearAllTimers()
 
-      endGame(
-        correct,
-        wrong,
-        totalReactionTime
-      )
+      endGame(score)
     }
 
-  }, 1000)
+  },1000)
 }
 
 // ================= QUESTION =================
+
 const startNewQuestion = () => {
 
   const question =
@@ -237,7 +233,8 @@ const startNewQuestion = () => {
     question.startTime
 }
 
-// ================= COLOR BUTTONS =================
+// ================= BUTTONS =================
+
 const buttons =
   document.querySelectorAll('.buttons button')
 
@@ -245,8 +242,8 @@ buttons.forEach((button) => {
 
   button.addEventListener('click', () => {
 
-    if (gameEnded) return
-    if (!gameStarted) return
+    if(gameEnded) return
+    if(!gameStarted) return
 
     const selectedColor =
       button.getAttribute('data-color')
@@ -254,30 +251,44 @@ buttons.forEach((button) => {
     const reactionTime =
       performance.now() - currentStartTime
 
-    totalReactionTime += reactionTime
+    // ================= CORRECT =================
 
-    if (selectedColor === currentCorrectColor) {
+    if(selectedColor === currentCorrectColor){
 
-      correct++
+      score++
 
-    } else {
+      addReactionTime(reactionTime)
 
-      wrong++
+      const averageReaction =
+        getAverageReaction(score)
+
+      updateScore(
+        score,
+        averageReaction
+      )
+
+      startNewQuestion()
 
     }
 
-    updateScore(
-      correct,
-      wrong,
-      totalReactionTime
-    )
+    // ================= WRONG =================
 
-    startNewQuestion()
+    else{
+
+      gameEnded = true
+      gameStarted = false
+
+      clearAllTimers()
+
+      endGame(score)
+    }
+
   })
 
 })
 
-// ================= EXIT BUTTON =================
+// ================= EXIT =================
+
 const exitBtn =
   document.querySelector('#exit-btn') as HTMLButtonElement
 
@@ -286,21 +297,13 @@ exitBtn.addEventListener('click', () => {
   gameEnded = true
   gameStarted = false
 
-  if (timerInterval) {
-    clearInterval(timerInterval)
-  }
+  clearAllTimers()
 
-  const gameScreen =
-    document.querySelector('.game-screen') as HTMLDivElement
-
-  const startScreen =
-    document.querySelector('.start-screen') as HTMLDivElement
-
-  gameScreen.style.display = 'none'
-  startScreen.style.display = 'flex'
+  endGame(score)
 })
 
 // ================= PLAY AGAIN =================
+
 const restartBtn =
   document.querySelector('#restart-btn') as HTMLButtonElement
 
@@ -313,7 +316,7 @@ restartBtn.addEventListener('click', () => {
 
   timeLeft = selectedTime
 
-  updateScore(0, 0, 0)
+  updateScore(0,0)
   updateTimer(timeLeft)
 
   resetGame()
@@ -322,7 +325,8 @@ restartBtn.addEventListener('click', () => {
   startNewQuestion()
 })
 
-// ================= BACK TO START =================
+// ================= BACK =================
+
 const backBtn =
   document.querySelector('#back-btn') as HTMLButtonElement
 
@@ -330,7 +334,7 @@ backBtn.addEventListener('click', () => {
 
   resetAllState()
 
-  updateScore(0, 0, 0)
+  updateScore(0,0)
   updateTimer(selectedTime)
 
   const resultScreen =
@@ -347,20 +351,25 @@ backBtn.addEventListener('click', () => {
   startScreen.style.display = 'flex'
 })
 
-// ================= RESET FUNCTION =================
+// ================= RESET =================
+
 const resetAllState = () => {
 
-  correct = 0
-  wrong = 0
-
-  totalReactionTime = 0
+  score = 0
 
   gameEnded = false
   gameStarted = false
 
   timeLeft = selectedTime
 
-  if (timerInterval) {
+  clearAllTimers()
+}
+
+// ================= CLEAR =================
+
+const clearAllTimers = () => {
+
+  if(timerInterval){
 
     clearInterval(timerInterval)
 

@@ -5,7 +5,6 @@ const colors = [
   'YELLOW'
 ]
 
-
 const colorMap: Record<string, string> = {
   RED: '#ef4444',
   BLUE: '#3b82f6',
@@ -13,113 +12,244 @@ const colorMap: Record<string, string> = {
   YELLOW: '#facc15'
 }
 
-function randomColor() {
-  return colors[
-    Math.floor(Math.random() * colors.length)
+// ================= GAME STATE =================
+
+let lastWord = ''
+let lastColor = ''
+
+let totalReactionTime = 0
+
+// ================= FAIRNESS STATS =================
+
+let colorStats = {
+  RED: 0,
+  BLUE: 0,
+  GREEN: 0,
+  YELLOW: 0
+}
+
+let wordRepeatRerolls = 0
+let colorRepeatRerolls = 0
+let congruentRerolls = 0
+
+// ================= RANDOM =================
+
+function randomFromArray(
+  array: string[]
+){
+
+  return array[
+    Math.floor(
+      Math.random() * array.length
+    )
   ]
 }
 
-export function updateTimer(timeLeft: number) {
+// ================= TIMER =================
+
+export function updateTimer(
+  timeLeft: number
+){
+
   document.querySelector('#timer')!.textContent =
     'Time Left: ' + timeLeft + 's'
 }
 
+// ================= SCORE =================
+
 export function updateScore(
-  correct: number,
-  wrong: number,
-  totalReactionTime: number
-) {
-  const total = correct + wrong
-
-  const accuracy =
-    total === 0
-      ? 0
-      : Math.round((correct / total) * 100)
-
-  const averageReaction =
-    total === 0
-      ? 0
-      : Math.round(totalReactionTime / total)
+  score: number,
+  averageReaction: number
+){
 
   document.querySelector('#correct-score')!.textContent =
-    String(correct)
-
-  document.querySelector('#wrong-score')!.textContent =
-    String(wrong)
-
-  document.querySelector('#accuracy-score')!.textContent =
-    accuracy + '%'
+    String(score)
 
   document.querySelector('#reaction-time')!.textContent =
     averageReaction + ' ms'
 }
 
-export function generateQuestion() {
-  const randomWord = randomColor()
-  const correctColor = randomColor()
+// ================= FAIR QUESTION =================
+
+export function generateQuestion(){
+
+  // ================= WORD =================
+
+  let availableWords =
+    colors.filter(
+      color => color !== lastWord
+    )
+
+  // track reroll
+  if(availableWords.length < colors.length){
+
+    wordRepeatRerolls++
+  }
+
+  let randomWord =
+    randomFromArray(
+      availableWords
+    )
+
+  // ================= VALID COLORS =================
+
+  let availableColors =
+    colors.filter(color => {
+
+      // ❌ no same color repeat
+      if(color === lastColor){
+
+        colorRepeatRerolls++
+
+        return false
+      }
+
+      // ❌ no congruent
+      if(color === randomWord){
+
+        congruentRerolls++
+
+        return false
+      }
+
+      return true
+    })
+
+  // ================= DISTRIBUTION BALANCE =================
+
+  const minCount =
+    Math.min(
+      ...availableColors.map(
+        color =>
+          colorStats[
+            color as keyof typeof colorStats
+          ]
+      )
+    )
+
+  const balancedColors =
+    availableColors.filter(
+      color =>
+        colorStats[
+          color as keyof typeof colorStats
+        ] === minCount
+    )
+
+  let correctColor =
+    randomFromArray(
+      balancedColors
+    )
+
+  // ================= SAVE STATE =================
+
+  lastWord = randomWord
+  lastColor = correctColor
+
+  colorStats[
+    correctColor as keyof typeof colorStats
+  ]++
+
+  // ================= RENDER =================
 
   const word =
     document.querySelector('#word') as HTMLDivElement
 
-  // 🧠 คำที่แสดง (RED / BLUE / GREEN / YELLOW)
-  word.innerText = randomWord
+  word.innerText =
+    randomWord
 
-  // 🎯 สีตัวอักษร (ใช้ HEX จริง)
-  word.style.color = colorMap[correctColor]
+  word.style.color =
+    colorMap[correctColor]
 
   return {
+
     correctColor,
-    startTime: performance.now()
+
+    startTime:
+      performance.now()
   }
 }
 
-export function resetGame() {
-  const resultScreen =
-    document.querySelector('.result-screen') as HTMLDivElement
+// ================= REACTION =================
 
-  resultScreen.style.display = 'none'
+export function addReactionTime(
+  reactionTime: number
+){
 
-  const gameScreen =
-    document.querySelector('.game-screen') as HTMLDivElement
-
-  gameScreen.style.display = 'flex'
+  totalReactionTime += reactionTime
 }
 
-export function endGame(
-  correct: number,
-  wrong: number,
-  totalReactionTime: number
-) {
-  const total = correct + wrong
+export function getAverageReaction(
+  score: number
+){
 
-  const accuracy =
-    total === 0
-      ? 0
-      : Math.round((correct / total) * 100)
+  if(score === 0){
 
-  const averageReaction =
-    total === 0
-      ? 0
-      : Math.round(totalReactionTime / total)
+    return 0
+  }
 
-  const gameScreen =
-    document.querySelector('.game-screen') as HTMLDivElement
+  return Math.round(
+    totalReactionTime / score
+  )
+}
 
-  gameScreen.style.display = 'none'
+// ================= RESET =================
+
+export function resetGame(){
+
+  totalReactionTime = 0
+
+  lastWord = ''
+  lastColor = ''
+
+  colorStats = {
+    RED: 0,
+    BLUE: 0,
+    GREEN: 0,
+    YELLOW: 0
+  }
+
+  wordRepeatRerolls = 0
+  colorRepeatRerolls = 0
+  congruentRerolls = 0
 
   const resultScreen =
     document.querySelector('.result-screen') as HTMLDivElement
 
-  resultScreen.style.display = 'flex'
+  resultScreen.style.display =
+    'none'
+
+  const gameScreen =
+    document.querySelector('.game-screen') as HTMLDivElement
+
+  gameScreen.style.display =
+    'flex'
+}
+
+// ================= END GAME =================
+
+export function endGame(
+  score: number
+){
+
+  const averageReaction =
+    getAverageReaction(score)
+
+  const gameScreen =
+    document.querySelector('.game-screen') as HTMLDivElement
+
+  gameScreen.style.display =
+    'none'
+
+  const resultScreen =
+    document.querySelector('.result-screen') as HTMLDivElement
+
+  resultScreen.style.display =
+    'flex'
+
+  // ================= SCORE =================
 
   document.querySelector('#final-correct')!.textContent =
-    String(correct)
-
-  document.querySelector('#final-wrong')!.textContent =
-    String(wrong)
-
-  document.querySelector('#final-accuracy')!.textContent =
-    accuracy + '%'
+    String(score)
 
   document.querySelector('#final-reaction')!.textContent =
     averageReaction + ' ms'
